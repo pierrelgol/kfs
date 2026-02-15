@@ -8,11 +8,26 @@ Kernel from Scratch implementation in Zig + NASM (i386, GRUB boot).
 make
 ```
 
+## Test
+
+```sh
+make test
+```
+
 ## Run
 
 ```sh
 make run
 ```
+
+## Required tools
+
+- `zig`
+- `nasm`
+- `ld` (binutils)
+- `grub-mkstandalone` + `grub-pc-bin`
+- `xorriso`
+- `qemu-system-i386`
 
 ## Branches
 
