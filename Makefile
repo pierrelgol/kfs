@@ -29,10 +29,10 @@ check-tools:
 	zig build check-tools
 
 clean:
-	zig build clean
+	@if [ -d build ]; then find build -mindepth 1 ! -name kfs.iso -exec rm -rf {} +; fi
 
-fclean: clean
-	zig build clean
+fclean:
+	rm -rf build
 
 re: fclean all
 
