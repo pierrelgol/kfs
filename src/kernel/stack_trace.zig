@@ -1,11 +1,12 @@
+const builtin = @import("builtin");
 const printk = @import("printk.zig");
 
 extern fn read_esp() callconv(.c) u32;
 extern fn read_ebp() callconv(.c) u32;
 
 pub fn dumpKernelStack() void {
-    const esp = read_esp();
-    const ebp = read_ebp();
+    const esp = readEsp();
+    const ebp = readEbp();
 
     printk.printf("stack esp=%x ebp=%x\n", &[_]printk.PrintArg{
         .{ .u32 = esp },
@@ -14,6 +15,20 @@ pub fn dumpKernelStack() void {
 
     dumpRawWords(esp);
     dumpFrames(ebp);
+}
+
+fn readEsp() u32 {
+    if (builtin.is_test) {
+        return 0;
+    }
+    return read_esp();
+}
+
+fn readEbp() u32 {
+    if (builtin.is_test) {
+        return 0;
+    }
+    return read_ebp();
 }
 
 fn dumpRawWords(esp: u32) void {

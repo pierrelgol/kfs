@@ -1,3 +1,4 @@
+const builtin = @import("builtin");
 const printk = @import("printk.zig");
 
 const GDT_BASE: usize = 0x00000800;
@@ -51,7 +52,14 @@ pub fn init() void {
     gdtr.base = GDT_BASE;
 
     // 0x10 = kernel data selector (index 2), 0x08 = kernel code selector (index 1)
-    gdt_flush(&gdtr, 0x10, 0x08);
+    gdtFlush(&gdtr, 0x10, 0x08);
 
     printk.printf("gdt loaded at %x\n", &[_]printk.PrintArg{.{ .u32 = @intCast(GDT_BASE) }});
+}
+
+fn gdtFlush(gdtr_ptr: *const GdtPointer, data_selector: u16, code_selector: u16) void {
+    if (builtin.is_test) {
+        return;
+    }
+    gdt_flush(gdtr_ptr, data_selector, code_selector);
 }

@@ -7,6 +7,7 @@ pub fn build(b: *std.Build) void {
     const kernel_elf = b.pathJoin(&.{ build_dir, "kernel.elf" });
     const kernel_obj = b.pathJoin(&.{ build_dir, "kernel.o" });
     const boot_obj = b.pathJoin(&.{ build_dir, "boot.o" });
+    const gdt_flush_obj = b.pathJoin(&.{ build_dir, "gdt_flush.o" });
     const core_img = b.pathJoin(&.{ build_dir, "core.img" });
     const bios_img = b.pathJoin(&.{ build_dir, "bios.img" });
     const raw_img = b.pathJoin(&.{ build_dir, "kfs.img" });
@@ -32,6 +33,11 @@ pub fn build(b: *std.Build) void {
     });
     assemble_boot.step.dependOn(check_kernel_tools);
 
+    const assemble_gdt_flush = b.addSystemCommand(&.{
+        "sh", "-c", b.fmt("mkdir -p {s} && nasm -f elf32 src/boot/gdt_flush.asm -o {s}", .{ build_dir, gdt_flush_obj }),
+    });
+    assemble_gdt_flush.step.dependOn(check_kernel_tools);
+
     const compile_kernel = b.addSystemCommand(&.{
         "sh", "-c", b.fmt(
             "mkdir -p {s} && zig build-obj src/kernel/main.zig -target x86-freestanding-none -mcpu i386 -O ReleaseSmall -fstrip -fno-stack-check -fno-stack-protector -femit-bin={s}",
@@ -42,9 +48,10 @@ pub fn build(b: *std.Build) void {
 
     const link_kernel = b.addSystemCommand(&.{
         "ld", "-m", "elf_i386", "-nostdlib", "-T", "linker/kernel.ld",
-        "-o", kernel_elf, boot_obj, kernel_obj,
+        "-o", kernel_elf, boot_obj, gdt_flush_obj, kernel_obj,
     });
     link_kernel.step.dependOn(&assemble_boot.step);
+    link_kernel.step.dependOn(&assemble_gdt_flush.step);
     link_kernel.step.dependOn(&compile_kernel.step);
 
     const kernel_step = b.step("kernel", "Build kernel ELF");
