@@ -1,4 +1,5 @@
 const builtin = @import("builtin");
+const std = @import("std");
 const printk = @import("printk.zig");
 
 const GDT_BASE: usize = 0x00000800;
@@ -21,8 +22,12 @@ const GdtPointer = packed struct {
 extern fn gdt_flush(gdtr: *const GdtPointer, data_selector: u16, code_selector: u16) callconv(.c) void;
 
 var gdtr: GdtPointer = .{ .limit = 0, .base = 0 };
+var test_gdt_table: [ENTRY_COUNT]GdtEntry = undefined;
 
 fn gdtTable() *[ENTRY_COUNT]GdtEntry {
+    if (builtin.is_test) {
+        return &test_gdt_table;
+    }
     return @as(*[ENTRY_COUNT]GdtEntry, @ptrFromInt(GDT_BASE));
 }
 
@@ -62,4 +67,20 @@ fn gdtFlush(gdtr_ptr: *const GdtPointer, data_selector: u16, code_selector: u16)
         return;
     }
     gdt_flush(gdtr_ptr, data_selector, code_selector);
+}
+
+test "gdt init populates required entries and gdtr" {
+    init();
+    const table = gdtTable();
+
+    try std.testing.expectEqual(@as(u8, 0), table[0].access);
+    try std.testing.expectEqual(@as(u8, 0x9A), table[1].access); // kernel code
+    try std.testing.expectEqual(@as(u8, 0x92), table[2].access); // kernel data
+    try std.testing.expectEqual(@as(u8, 0x92), table[3].access); // kernel stack
+    try std.testing.expectEqual(@as(u8, 0xFA), table[4].access); // user code
+    try std.testing.expectEqual(@as(u8, 0xF2), table[5].access); // user data
+    try std.testing.expectEqual(@as(u8, 0xF2), table[6].access); // user stack
+
+    try std.testing.expectEqual(@as(u16, @sizeOf([ENTRY_COUNT]GdtEntry) - 1), gdtr.limit);
+    try std.testing.expectEqual(@as(u32, GDT_BASE), gdtr.base);
 }

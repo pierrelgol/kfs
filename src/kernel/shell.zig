@@ -346,6 +346,10 @@ test "command execution help echo clear screen and unknown" {
     try std.testing.expectEqual(@as(u16, 'u'), screens.testCell(0) & 0x00FF);
 
     screens.clear();
+    execute("stack");
+    try std.testing.expectEqual(@as(u16, 's'), screens.testCell(0) & 0x00FF);
+
+    screens.clear();
     execute("wat");
     try std.testing.expectEqual(@as(u16, 'u'), screens.testCell(0) & 0x00FF);
 }
