@@ -9,6 +9,13 @@ const stack_trace = @import("stack_trace.zig");
 
 const MAX_LINE: usize = 128;
 const PROMPT: []const u8 = "kfs> ";
+const INPUT_CAPACITY: usize = @min(MAX_LINE, screens.WIDTH - PROMPT.len);
+
+comptime {
+    if (PROMPT.len >= screens.WIDTH) {
+        @compileError("shell prompt must fit in one VGA line");
+    }
+}
 
 const LineState = struct {
     buf: [MAX_LINE]u8 = undefined,
@@ -16,7 +23,6 @@ const LineState = struct {
     cursor: usize = 0,
     rendered_len: usize = 0,
     row: usize = 0,
-    prompt_col: usize = 0,
 };
 
 var line: LineState = .{};
@@ -26,7 +32,6 @@ pub fn init() void {
     line.cursor = 0;
     line.rendered_len = 0;
     line.row = screens.cursorY();
-    line.prompt_col = 0;
 }
 
 pub fn printPrompt() void {
@@ -35,7 +40,6 @@ pub fn printPrompt() void {
     }
 
     line.row = screens.cursorY();
-    line.prompt_col = 0;
     line.len = 0;
     line.cursor = 0;
     line.rendered_len = 0;
@@ -100,8 +104,7 @@ fn insertChar(c: u8) void {
         return;
     }
 
-    const line_capacity = screens.WIDTH - PROMPT.len;
-    if (line.len >= line_capacity) {
+    if (line.len >= INPUT_CAPACITY) {
         return;
     }
 
@@ -235,14 +238,16 @@ pub fn execute(line_in: []const u8) void {
 
 fn redrawLine() void {
     std.debug.assert(line.len <= MAX_LINE);
+    std.debug.assert(line.len <= INPUT_CAPACITY);
     std.debug.assert(line.cursor <= line.len);
+    std.debug.assert(line.row < screens.HEIGHT);
 
     const max_len = if (line.rendered_len > line.len) line.rendered_len else line.len;
 
     var i: usize = 0;
     while (i < max_len) : (i += 1) {
         const c: u8 = if (i < line.len) line.buf[i] else ' ';
-        screens.writeByteAt(line.prompt_col + PROMPT.len + i, line.row, c);
+        screens.writeByteAt(PROMPT.len + i, line.row, c);
     }
 
     line.rendered_len = line.len;
@@ -250,9 +255,11 @@ fn redrawLine() void {
 }
 
 fn syncCursor() void {
+    std.debug.assert(line.len <= INPUT_CAPACITY);
     std.debug.assert(line.cursor <= line.len);
+    std.debug.assert(line.row < screens.HEIGHT);
 
-    const x = line.prompt_col + PROMPT.len + line.cursor;
+    const x = PROMPT.len + line.cursor;
     std.debug.assert(x < screens.WIDTH);
     screens.setCursor(x, line.row);
 }
@@ -313,4 +320,48 @@ test "command execution selftest stop path" {
 
     execute("selftest stop");
     try std.testing.expect(!selftest.isActive());
+}
+
+test "command execution help echo clear screen and unknown" {
+    screens.init();
+    init();
+
+    execute("help");
+    try std.testing.expectEqual(@as(u16, 'c'), screens.testCell(0) & 0x00FF);
+
+    screens.clear();
+    execute("echo zig");
+    try std.testing.expectEqual(@as(u16, 'z'), screens.testCell(0) & 0x00FF);
+    try std.testing.expectEqual(@as(u16, 'g'), screens.testCell(2) & 0x00FF);
+
+    execute("clear");
+    try std.testing.expectEqual(@as(usize, 0), screens.cursorPosition());
+    try std.testing.expectEqual(@as(u16, ' '), screens.testCell(0) & 0x00FF);
+
+    execute("screen 1");
+    try std.testing.expectEqual(@as(usize, 1), screens.activeScreen());
+
+    execute("screen 9");
+    try std.testing.expectEqual(@as(usize, 1), screens.activeScreen());
+    try std.testing.expectEqual(@as(u16, 'u'), screens.testCell(0) & 0x00FF);
+
+    screens.clear();
+    execute("wat");
+    try std.testing.expectEqual(@as(u16, 'u'), screens.testCell(0) & 0x00FF);
+}
+
+test "command helpers parse single digit and prefix checks" {
+    try std.testing.expectEqual(@as(?usize, 0), parseSingleDigit("0"));
+    try std.testing.expectEqual(@as(?usize, 9), parseSingleDigit("9"));
+    try std.testing.expectEqual(@as(?usize, null), parseSingleDigit(""));
+    try std.testing.expectEqual(@as(?usize, null), parseSingleDigit("12"));
+    try std.testing.expectEqual(@as(?usize, null), parseSingleDigit("x"));
+
+    try std.testing.expect(equals("abc", "abc"));
+    try std.testing.expect(!equals("abc", "ab"));
+    try std.testing.expect(!equals("abc", "abd"));
+
+    try std.testing.expect(startsWith("screen 1", "screen "));
+    try std.testing.expect(!startsWith("screen", "screen "));
+    try std.testing.expect(!startsWith("echo", "stack"));
 }
