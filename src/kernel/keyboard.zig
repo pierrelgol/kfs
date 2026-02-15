@@ -1,3 +1,5 @@
+const std = @import("std");
+
 const arch = @import("arch.zig");
 const screens = @import("screens.zig");
 
@@ -10,6 +12,8 @@ pub const KeyEvent = struct {
 };
 
 pub fn poll() ?KeyEvent {
+    std.debug.assert(screens.SCREEN_COUNT >= 3);
+
     if ((arch.inb(STATUS_PORT) & 0x01) == 0) {
         return null;
     }
@@ -35,7 +39,7 @@ pub fn poll() ?KeyEvent {
     return KeyEvent{ .ascii = translateSet1(scancode), .pressed = true };
 }
 
-fn translateSet1(scancode: u8) u8 {
+pub fn translateSet1(scancode: u8) u8 {
     return switch (scancode) {
         0x02 => '1',
         0x03 => '2',
@@ -90,4 +94,46 @@ fn translateSet1(scancode: u8) u8 {
         0x39 => ' ',
         else => 0,
     };
+}
+
+test "translate set1 known and unknown" {
+    try std.testing.expectEqual(@as(u8, 'a'), translateSet1(0x1E));
+    try std.testing.expectEqual(@as(u8, '\n'), translateSet1(0x1C));
+    try std.testing.expectEqual(@as(u8, 0), translateSet1(0x7F));
+}
+
+test "poll handles empty status, key release and regular key" {
+    screens.init();
+    arch.testReset();
+
+    arch.testSetIn(STATUS_PORT, 0x00);
+    try std.testing.expectEqual(@as(?KeyEvent, null), poll());
+
+    arch.testSetIn(STATUS_PORT, 0x01);
+    arch.testSetIn(DATA_PORT, 0x9E);
+    const release = poll().?;
+    try std.testing.expect(!release.pressed);
+
+    arch.testSetIn(DATA_PORT, 0x1E);
+    const key = poll().?;
+    try std.testing.expect(key.pressed);
+    try std.testing.expectEqual(@as(u8, 'a'), key.ascii);
+}
+
+test "poll handles screen switch keys" {
+    screens.init();
+    arch.testReset();
+
+    arch.testSetIn(STATUS_PORT, 0x01);
+    arch.testSetIn(DATA_PORT, 0x3C);
+    _ = poll();
+    try std.testing.expectEqual(@as(usize, 1), screens.activeScreen());
+
+    arch.testSetIn(DATA_PORT, 0x3D);
+    _ = poll();
+    try std.testing.expectEqual(@as(usize, 2), screens.activeScreen());
+
+    arch.testSetIn(DATA_PORT, 0x3B);
+    _ = poll();
+    try std.testing.expectEqual(@as(usize, 0), screens.activeScreen());
 }

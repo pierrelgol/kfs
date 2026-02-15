@@ -1,3 +1,6 @@
+const builtin = @import("builtin");
+const std = @import("std");
+
 const arch = @import("arch.zig");
 
 pub const WIDTH: usize = 80;
@@ -18,12 +21,36 @@ const Screen = struct {
 var screens: [SCREEN_COUNT]Screen = undefined;
 var active_index: usize = 0;
 
+var test_vga: [WIDTH * HEIGHT]u16 = [_]u16{0} ** (WIDTH * HEIGHT);
+var test_cursor_position: usize = 0;
+
 fn blankCell(color: u8) u16 {
     return (@as(u16, color) << 8) | @as(u16, ' ');
 }
 
 fn vgaMemory() *volatile [WIDTH * HEIGHT]u16 {
     return @as(*volatile [WIDTH * HEIGHT]u16, @ptrFromInt(VGA_ADDRESS));
+}
+
+fn setVgaCell(index: usize, value: u16) void {
+    std.debug.assert(index < WIDTH * HEIGHT);
+
+    if (builtin.is_test) {
+        test_vga[index] = value;
+        return;
+    }
+
+    vgaMemory()[index] = value;
+}
+
+fn getVgaCell(index: usize) u16 {
+    std.debug.assert(index < WIDTH * HEIGHT);
+
+    if (builtin.is_test) {
+        return test_vga[index];
+    }
+
+    return vgaMemory()[index];
 }
 
 pub fn init() void {
@@ -45,10 +72,12 @@ pub fn init() void {
 }
 
 pub fn setColor(color: u8) void {
+    std.debug.assert(active_index < SCREEN_COUNT);
     screens[active_index].color = color;
 }
 
 pub fn activeScreen() usize {
+    std.debug.assert(active_index < SCREEN_COUNT);
     return active_index;
 }
 
@@ -62,6 +91,8 @@ pub fn switchTo(index: usize) void {
 }
 
 pub fn clear() void {
+    std.debug.assert(active_index < SCREEN_COUNT);
+
     var i: usize = 0;
     const color = screens[active_index].color;
     while (i < WIDTH * HEIGHT) : (i += 1) {
@@ -85,24 +116,32 @@ pub fn writeByte(c: u8) void {
         return;
     }
 
+    std.debug.assert(active_index < SCREEN_COUNT);
+
     const x = screens[active_index].x;
     const y = screens[active_index].y;
+    std.debug.assert(x < WIDTH);
+    std.debug.assert(y < HEIGHT);
+
     const index = y * WIDTH + x;
     const color = screens[active_index].color;
     const cell = (@as(u16, color) << 8) | @as(u16, c);
 
     screens[active_index].buffer[index] = cell;
-    vgaMemory()[index] = cell;
+    setVgaCell(index, cell);
 
     screens[active_index].x += 1;
     if (screens[active_index].x >= WIDTH) {
         newLine();
+        return;
     }
 
     updateCursor();
 }
 
 fn newLine() void {
+    std.debug.assert(active_index < SCREEN_COUNT);
+
     screens[active_index].x = 0;
     screens[active_index].y += 1;
 
@@ -116,6 +155,8 @@ fn newLine() void {
 }
 
 fn scroll() void {
+    std.debug.assert(active_index < SCREEN_COUNT);
+
     var row: usize = 1;
     while (row < HEIGHT) : (row += 1) {
         var col: usize = 0;
@@ -135,6 +176,8 @@ fn scroll() void {
 }
 
 pub fn backspace() void {
+    std.debug.assert(active_index < SCREEN_COUNT);
+
     if (screens[active_index].x == 0 and screens[active_index].y == 0) {
         return;
     }
@@ -149,26 +192,99 @@ pub fn backspace() void {
     const idx = screens[active_index].y * WIDTH + screens[active_index].x;
     const cell = blankCell(screens[active_index].color);
     screens[active_index].buffer[idx] = cell;
-    vgaMemory()[idx] = cell;
+    setVgaCell(idx, cell);
     updateCursor();
 }
 
 pub fn cursorPosition() usize {
+    std.debug.assert(active_index < SCREEN_COUNT);
+    std.debug.assert(screens[active_index].x < WIDTH);
+    std.debug.assert(screens[active_index].y < HEIGHT);
     return screens[active_index].y * WIDTH + screens[active_index].x;
 }
 
 fn flushActiveToVga() void {
     var i: usize = 0;
     while (i < WIDTH * HEIGHT) : (i += 1) {
-        vgaMemory()[i] = screens[active_index].buffer[i];
+        setVgaCell(i, screens[active_index].buffer[i]);
     }
 }
 
 fn updateCursor() void {
     const position: u16 = @intCast(cursorPosition());
 
+    if (builtin.is_test) {
+        test_cursor_position = position;
+        return;
+    }
+
     arch.outb(CURSOR_COMMAND_PORT, 0x0F);
     arch.outb(CURSOR_DATA_PORT, @truncate(position & 0x00FF));
     arch.outb(CURSOR_COMMAND_PORT, 0x0E);
     arch.outb(CURSOR_DATA_PORT, @truncate((position >> 8) & 0x00FF));
 }
+
+pub fn testCell(index: usize) u16 {
+    std.debug.assert(builtin.is_test);
+    return getVgaCell(index);
+}
+
+pub fn testCursorPosition() usize {
+    std.debug.assert(builtin.is_test);
+    return test_cursor_position;
+}
+
+test "init clears all screens and sets default cursor" {
+    init();
+    try std.testing.expectEqual(@as(usize, 0), activeScreen());
+    try std.testing.expectEqual(@as(usize, 0), cursorPosition());
+    try std.testing.expectEqual(blankCell(0x0F), testCell(0));
+    try std.testing.expectEqual(@as(usize, 0), testCursorPosition());
+}
+
+test "write string and newline update cursor and cells" {
+    init();
+    setColor(0x1E);
+    writeString("A\nB");
+
+    try std.testing.expectEqual((@as(u16, 0x1E) << 8) | @as(u16, 'A'), testCell(0));
+    try std.testing.expectEqual((@as(u16, 0x1E) << 8) | @as(u16, 'B'), testCell(WIDTH));
+    try std.testing.expectEqual(@as(usize, WIDTH + 1), cursorPosition());
+}
+
+test "switch screens preserves independent buffers" {
+    init();
+    writeString("X");
+    switchTo(1);
+    writeString("Y");
+
+    try std.testing.expectEqual((@as(u16, 0x0F) << 8) | @as(u16, 'Y'), testCell(0));
+
+    switchTo(0);
+    try std.testing.expectEqual((@as(u16, 0x0F) << 8) | @as(u16, 'X'), testCell(0));
+}
+
+test "scroll moves lines up" {
+    init();
+
+    var row: usize = 0;
+    while (row < HEIGHT) : (row += 1) {
+        writeByte(@intCast('a' + @as(u8, @intCast(row % 26))));
+        writeByte('\n');
+    }
+
+    const top = testCell(0) & 0x00FF;
+    try std.testing.expectEqual(@as(u16, 'b'), top);
+}
+
+test "backspace from middle and line start" {
+    init();
+    writeString("AB");
+    backspace();
+    try std.testing.expectEqual(@as(usize, 1), cursorPosition());
+
+    writeByte('\n');
+    backspace();
+    try std.testing.expectEqual(@as(usize, WIDTH - 1), cursorPosition());
+}
+

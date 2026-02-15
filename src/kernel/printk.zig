@@ -1,3 +1,5 @@
+const std = @import("std");
+
 const screens = @import("screens.zig");
 
 pub const ArgTag = enum {
@@ -54,41 +56,11 @@ pub fn printf(format: []const u8, args: []const PrintArg) void {
         arg_index += 1;
 
         switch (spec) {
-            's' => {
-                if (arg == .str) {
-                    screens.writeString(arg.str);
-                } else {
-                    screens.writeString("<bad:%s>");
-                }
-            },
-            'u' => {
-                if (arg == .u32) {
-                    writeU32(arg.u32);
-                } else {
-                    screens.writeString("<bad:%u>");
-                }
-            },
-            'd' => {
-                if (arg == .i32) {
-                    writeI32(arg.i32);
-                } else {
-                    screens.writeString("<bad:%d>");
-                }
-            },
-            'x' => {
-                if (arg == .u32) {
-                    writeHexU32(arg.u32);
-                } else {
-                    screens.writeString("<bad:%x>");
-                }
-            },
-            'c' => {
-                if (arg == .ch) {
-                    screens.writeByte(arg.ch);
-                } else {
-                    screens.writeString("<bad:%c>");
-                }
-            },
+            's' => if (arg == .str) screens.writeString(arg.str) else screens.writeString("<bad:%s>"),
+            'u' => if (arg == .u32) writeU32(arg.u32) else screens.writeString("<bad:%u>"),
+            'd' => if (arg == .i32) writeI32(arg.i32) else screens.writeString("<bad:%d>"),
+            'x' => if (arg == .u32) writeHexU32(arg.u32) else screens.writeString("<bad:%x>"),
+            'c' => if (arg == .ch) screens.writeByte(arg.ch) else screens.writeString("<bad:%c>"),
             else => {
                 screens.writeByte('%');
                 screens.writeByte(spec);
@@ -103,9 +75,9 @@ pub fn writeHexU32(value: u32) void {
     while (true) {
         const nibble: u4 = @truncate((value >> shift) & 0xF);
         if (nibble < 10) {
-            screens.writeByte('0' + nibble);
+            screens.writeByte(@as(u8, '0') + @as(u8, nibble));
         } else {
-            screens.writeByte('a' + (nibble - 10));
+            screens.writeByte(@as(u8, 'a') + (@as(u8, nibble) - 10));
         }
 
         if (shift == 0) {
@@ -126,7 +98,8 @@ pub fn writeU32(value: u32) void {
     var n = value;
 
     while (n > 0) {
-        digits[count] = @intCast('0' + (n % 10));
+        std.debug.assert(count < digits.len);
+        digits[count] = @as(u8, '0') + @as(u8, @intCast(n % 10));
         n /= 10;
         count += 1;
     }
@@ -140,9 +113,73 @@ pub fn writeU32(value: u32) void {
 pub fn writeI32(value: i32) void {
     if (value < 0) {
         screens.writeByte('-');
-        const positive: u32 = @intCast(-value);
-        writeU32(positive);
+
+        const magnitude: u32 = if (value == std.math.minInt(i32))
+            @as(u32, @intCast(-(value + 1))) + 1
+        else
+            @as(u32, @intCast(-value));
+
+        writeU32(magnitude);
         return;
     }
-    writeU32(@intCast(value));
+    writeU32(@as(u32, @intCast(value)));
+}
+
+fn readAsciiAt(index: usize) u8 {
+    return @truncate(screens.testCell(index) & 0x00FF);
+}
+
+test "write and println" {
+    screens.init();
+    write("ab");
+    println("cd");
+
+    try std.testing.expectEqual(@as(u8, 'a'), readAsciiAt(0));
+    try std.testing.expectEqual(@as(u8, 'b'), readAsciiAt(1));
+    try std.testing.expectEqual(@as(u8, 'c'), readAsciiAt(2));
+    try std.testing.expectEqual(@as(u8, 'd'), readAsciiAt(3));
+    try std.testing.expectEqual(@as(usize, screens.WIDTH), screens.cursorPosition());
+}
+
+test "writeU32 and writeI32 branches" {
+    screens.init();
+    writeU32(0);
+    writeByte(' ');
+    writeU32(4294967295);
+    writeByte(' ');
+    writeI32(-123);
+    writeByte(' ');
+    writeI32(std.math.minInt(i32));
+
+    try std.testing.expectEqual(@as(u8, '0'), readAsciiAt(0));
+    try std.testing.expectEqual(@as(u8, '4'), readAsciiAt(2));
+    try std.testing.expectEqual(@as(u8, '-'), readAsciiAt(13));
+    try std.testing.expectEqual(@as(u8, '-'), readAsciiAt(18));
+}
+
+test "printf format coverage" {
+    screens.init();
+    printf("%s %u %d %x %c %% %q", &[_]PrintArg{
+        .{ .str = "ok" },
+        .{ .u32 = 12 },
+        .{ .i32 = -3 },
+        .{ .u32 = 0x2A },
+        .{ .ch = 'Z' },
+    });
+
+    try std.testing.expectEqual(@as(u8, 'o'), readAsciiAt(0));
+    try std.testing.expectEqual(@as(u8, 'k'), readAsciiAt(1));
+
+    screens.init();
+    printf("%u %s", &[_]PrintArg{.{ .str = "bad" }});
+    try std.testing.expectEqual(@as(u8, '<'), readAsciiAt(0));
+
+    screens.init();
+    printf("%u %u", &[_]PrintArg{.{ .u32 = 1 }});
+    try std.testing.expectEqual(@as(u8, '1'), readAsciiAt(0));
+    try std.testing.expectEqual(@as(u8, '<'), readAsciiAt(2));
+}
+
+fn writeByte(c: u8) void {
+    screens.writeByte(c);
 }
