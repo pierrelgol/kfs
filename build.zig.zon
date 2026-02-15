@@ -1,0 +1,17 @@
+.{
+    .name = .kfs,
+    .version = "0.0.0",
+    .fingerprint = 0x41681174ee5a3779,
+    .minimum_zig_version = "0.16.0-dev.2611+f996d2866",
+    .dependencies = .{},
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+        "linker",
+        "grub",
+        "Makefile",
+        "README.md",
+        "LICENSE",
+    },
+}
