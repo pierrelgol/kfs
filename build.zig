@@ -174,9 +174,13 @@ pub fn build(b: *std.Build) void {
     const debug_step = b.step("debug", "Run kernel image in QEMU with gdb stub");
     debug_step.dependOn(&debug_cmd.step);
 
-    const clean_cmd = b.addSystemCommand(&.{ "sh", "-c", "rm -rf build" });
-    const clean_step = b.step("clean", "Remove build artifacts");
+    const clean_cmd = b.addSystemCommand(&.{ "sh", "-c", "if [ -d build ]; then find build -mindepth 1 ! -name kfs.iso -exec rm -rf {} +; fi" });
+    const clean_step = b.step("clean", "Remove build artifacts but keep submission ISO");
     clean_step.dependOn(&clean_cmd.step);
+
+    const fclean_cmd = b.addSystemCommand(&.{ "sh", "-c", "rm -rf build" });
+    const fclean_step = b.step("fclean", "Remove all build artifacts");
+    fclean_step.dependOn(&fclean_cmd.step);
 
     const all_step = b.step("all", "Build kernel, images, and validate size");
     all_step.dependOn(size_step);
