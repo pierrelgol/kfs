@@ -16,7 +16,7 @@ pub fn strcmp(a: [*:0]const u8, b: [*:0]const u8) i32 {
     return @as(i32, a[i]) - @as(i32, b[i]);
 }
 
-pub fn memcpy(dst: [*]u8, src: [*]const u8, len: usize) void {
+pub export fn memcpy(dst: [*]u8, src: [*]const u8, len: usize) callconv(.c) [*]u8 {
     std.debug.assert(len == 0 or @intFromPtr(dst) != 0);
     std.debug.assert(len == 0 or @intFromPtr(src) != 0);
 
@@ -24,15 +24,17 @@ pub fn memcpy(dst: [*]u8, src: [*]const u8, len: usize) void {
     while (i < len) : (i += 1) {
         dst[i] = src[i];
     }
+    return dst;
 }
 
-pub fn memset(dst: [*]u8, value: u8, len: usize) void {
+pub export fn memset(dst: [*]u8, value: u8, len: usize) callconv(.c) [*]u8 {
     std.debug.assert(len == 0 or @intFromPtr(dst) != 0);
 
     var i: usize = 0;
     while (i < len) : (i += 1) {
         dst[i] = value;
     }
+    return dst;
 }
 
 test "strlen and strcmp" {
@@ -50,13 +52,13 @@ test "memcpy and memset" {
     var src = [_]u8{ 1, 2, 3, 4 };
     var dst = [_]u8{ 0, 0, 0, 0 };
 
-    memcpy(&dst, &src, src.len);
+    _ = memcpy(&dst, &src, src.len);
     try std.testing.expectEqualSlices(u8, &src, &dst);
 
-    memset(&dst, 0xAA, dst.len);
+    _ = memset(&dst, 0xAA, dst.len);
     try std.testing.expectEqual(@as(u8, 0xAA), dst[0]);
     try std.testing.expectEqual(@as(u8, 0xAA), dst[3]);
 
-    memcpy(&dst, &src, 0);
-    memset(&dst, 0x00, 0);
+    _ = memcpy(&dst, &src, 0);
+    _ = memset(&dst, 0x00, 0);
 }
