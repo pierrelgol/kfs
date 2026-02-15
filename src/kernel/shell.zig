@@ -5,6 +5,7 @@ const keyboard = @import("keyboard.zig");
 const printk = @import("printk.zig");
 const screens = @import("screens.zig");
 const selftest = @import("selftest.zig");
+const stack_trace = @import("stack_trace.zig");
 
 const MAX_LINE: usize = 128;
 const PROMPT: []const u8 = "kfs> ";
@@ -176,12 +177,17 @@ fn submitLine() void {
 
 pub fn execute(line_in: []const u8) void {
     if (equals(line_in, "help")) {
-        printk.println("commands: help clear screen <n> selftest selftest stop echo <txt> halt reboot");
+        printk.println("commands: help clear stack screen <n> selftest selftest stop echo <txt> halt reboot");
         return;
     }
 
     if (equals(line_in, "clear")) {
         screens.clear();
+        return;
+    }
+
+    if (equals(line_in, "stack")) {
+        stack_trace.dumpKernelStack();
         return;
     }
 
