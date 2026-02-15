@@ -1,5 +1,3 @@
-const std = @import("std");
-
 const arch = @import("arch.zig");
 const gdt = @import("gdt.zig");
 const keyboard = @import("keyboard.zig");
@@ -41,26 +39,4 @@ pub fn panic(_: []const u8, _: ?*anyopaque, _: ?usize) noreturn {
     screens.setColor(0x4F);
     printk.println("kernel panic");
     arch.haltForever();
-}
-
-test "shell handles char and function events" {
-    screens.init();
-    shell.init();
-    shell.printPrompt();
-
-    shell.handleKeyEvent(.{ .kind = .char, .pressed = true, .ascii = 'A', .function = null, .control = null, .scancode = 0x1E });
-    try std.testing.expectEqual(@as(u16, 'A'), screens.testCell(5) & 0x00FF);
-
-    shell.handleKeyEvent(.{ .kind = .function, .pressed = true, .ascii = 0, .function = .f2, .control = null, .scancode = 0x3C });
-    try std.testing.expectEqual(@as(usize, 1), screens.activeScreen());
-}
-
-test "esc cancels active selftest mode" {
-    screens.init();
-    shell.init();
-    selftest.start(.collect);
-    try std.testing.expect(selftest.isActive());
-
-    shell.handleKeyEvent(.{ .kind = .control, .pressed = true, .ascii = 0, .function = null, .control = .esc, .scancode = 0x01 });
-    try std.testing.expect(!selftest.isActive());
 }

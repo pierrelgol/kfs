@@ -1,6 +1,7 @@
 const builtin = @import("builtin");
 const std = @import("std");
 const printk = @import("printk.zig");
+const screens = @import("screens.zig");
 
 const GDT_BASE: usize = 0x00000800;
 const ENTRY_COUNT: usize = 7;
@@ -70,6 +71,7 @@ fn gdtFlush(gdtr_ptr: *const GdtPointer, data_selector: u16, code_selector: u16)
 }
 
 test "gdt init populates required entries and gdtr" {
+    screens.init();
     init();
     const table = gdtTable();
 

@@ -143,10 +143,15 @@ pub fn build(b: *std.Build) void {
     size_step.dependOn(&size_raw.step);
     size_step.dependOn(&size_iso.step);
 
-    const test_cmd = b.addSystemCommand(&.{ "zig", "test", "src/kernel/tests.zig", "-O", "Debug" });
-    test_cmd.step.dependOn(check_kernel_tools);
+    const test_core_cmd = b.addSystemCommand(&.{ "zig", "test", "src/kernel/tests.zig", "-O", "Debug" });
+    test_core_cmd.step.dependOn(check_kernel_tools);
+
+    const test_kfs2_cmd = b.addSystemCommand(&.{ "zig", "test", "src/kernel/tests_kfs2.zig", "-O", "Debug" });
+    test_kfs2_cmd.step.dependOn(check_kernel_tools);
+
     const test_step = b.step("test", "Run kernel unit tests");
-    test_step.dependOn(&test_cmd.step);
+    test_step.dependOn(&test_core_cmd.step);
+    test_step.dependOn(&test_kfs2_cmd.step);
 
     const coverage_cmd = b.addSystemCommand(&.{ "sh", "-c", "mkdir -p build && rm -rf build/coverage build/tests_coverage && zig test src/kernel/tests.zig -O Debug --test-no-exec -femit-bin=build/tests_coverage && kcov --clean --include-path=$(pwd)/src/kernel build/coverage build/tests_coverage" });
     coverage_cmd.step.dependOn(check_kernel_tools);
