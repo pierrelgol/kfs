@@ -78,6 +78,9 @@ pub fn tick() void {
     if (state != .running) {
         return;
     }
+    std.debug.assert(current_summary.total == runtime_tests.len);
+    std.debug.assert(current_summary.passed + current_summary.failed <= current_summary.total);
+    std.debug.assert(current_index <= runtime_tests.len);
 
     if (current_index >= runtime_tests.len) {
         state = .done;
@@ -116,9 +119,6 @@ pub fn runAll(mode: FailureMode) Summary {
                 state = .running;
             }
         }
-    }
-    if (state == .done) {
-        printk.printlnf("[selftest] done total={d} passed={d} failed={d}", .{ current_summary.total, current_summary.passed, current_summary.failed });
     }
     return summary();
 }
