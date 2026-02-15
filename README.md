@@ -13,7 +13,9 @@ zig build kernel
 zig build image
 zig build size
 zig build test
+zig build coverage
 zig build run
+zig build run-selftest
 zig build debug
 zig build clean
 zig build check-tools
@@ -24,9 +26,20 @@ zig build check-tools
 ```sh
 make
 make test
+make coverage
 make run
+make run-selftest
 make debug
 ```
+
+Runtime self-tests:
+- Press `F12` in QEMU to run the in-kernel automated self-test suite.
+- Press `Esc` while tests are active to cancel test mode cleanly.
+- On first failure (without cancellation), the kernel panics immediately.
+
+Coverage:
+- `zig build coverage` (or `make coverage`) generates a kcov report at `build/coverage/index.html`.
+- Coverage is optional and does not gate regular `zig build test`.
 
 ## Required tools
 

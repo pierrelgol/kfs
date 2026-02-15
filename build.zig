@@ -17,12 +17,14 @@ pub fn build(b: *std.Build) void {
     const check_kernel_tools = addToolChecks(b, &.{ "zig", "nasm", "ld" });
     const check_image_tools = addToolChecks(b, &.{ "grub-mkstandalone", "xorriso" });
     const check_qemu = addToolChecks(b, &.{ "qemu-system-i386" });
+    const check_kcov = addToolChecks(b, &.{ "kcov" });
     const check_boot_img = b.addSystemCommand(&.{ "test", "-f", "/usr/lib/grub/i386-pc/boot.img" });
 
     const check_tools_step = b.step("check-tools", "Check required external tools and GRUB BIOS image");
     check_tools_step.dependOn(check_kernel_tools);
     check_tools_step.dependOn(check_image_tools);
     check_tools_step.dependOn(check_qemu);
+    check_tools_step.dependOn(check_kcov);
     check_tools_step.dependOn(&check_boot_img.step);
 
     const assemble_boot = b.addSystemCommand(&.{
@@ -139,6 +141,12 @@ pub fn build(b: *std.Build) void {
     const test_step = b.step("test", "Run kernel unit tests");
     test_step.dependOn(&test_cmd.step);
 
+    const coverage_cmd = b.addSystemCommand(&.{ "sh", "-c", "mkdir -p build && rm -rf build/coverage build/tests_coverage && zig test src/kernel/tests.zig -O Debug --test-no-exec -femit-bin=build/tests_coverage && kcov --clean --include-path=$(pwd)/src/kernel build/coverage build/tests_coverage" });
+    coverage_cmd.step.dependOn(check_kernel_tools);
+    coverage_cmd.step.dependOn(check_kcov);
+    const coverage_step = b.step("coverage", "Generate kcov coverage report for host kernel tests");
+    coverage_step.dependOn(&coverage_cmd.step);
+
     const run_cmd = b.addSystemCommand(&.{
         "qemu-system-i386", "-m", "128M", "-drive", b.fmt("file={s},format=raw,if=floppy", .{raw_img}),
     });
@@ -146,6 +154,17 @@ pub fn build(b: *std.Build) void {
     run_cmd.step.dependOn(&truncate_raw_img.step);
     const run_step = b.step("run", "Run kernel image in QEMU");
     run_step.dependOn(&run_cmd.step);
+
+    const selftest_hint = b.addSystemCommand(&.{ "sh", "-c", "echo \"Press F12 in QEMU to run runtime selftests.\"" });
+    selftest_hint.step.dependOn(&truncate_raw_img.step);
+
+    const run_selftest_cmd = b.addSystemCommand(&.{
+        "qemu-system-i386", "-m", "128M", "-drive", b.fmt("file={s},format=raw,if=floppy", .{raw_img}),
+    });
+    run_selftest_cmd.step.dependOn(check_qemu);
+    run_selftest_cmd.step.dependOn(&selftest_hint.step);
+    const run_selftest_step = b.step("run-selftest", "Run kernel and trigger runtime selftests with F12");
+    run_selftest_step.dependOn(&run_selftest_cmd.step);
 
     const debug_cmd = b.addSystemCommand(&.{
         "qemu-system-i386", "-m", "128M", "-s", "-S", "-drive", b.fmt("file={s},format=raw,if=floppy", .{raw_img}),

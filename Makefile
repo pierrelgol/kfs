@@ -4,8 +4,14 @@ all:
 test:
 	zig build test
 
+coverage:
+	zig build coverage
+
 run:
 	zig build run
+
+run-selftest:
+	zig build run-selftest
 
 debug:
 	zig build debug
@@ -30,4 +36,4 @@ fclean: clean
 
 re: fclean all
 
-.PHONY: all test run debug kernel image size check-tools clean fclean re
+.PHONY: all test coverage run run-selftest debug kernel image size check-tools clean fclean re
