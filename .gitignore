@@ -21,3 +21,7 @@ serial.log
 .DS_Store
 *.swp
 *~
+
+# Keep one tracked submission image per branch.
+!images/
+!images/*.iso
