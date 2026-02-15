@@ -5,6 +5,7 @@ const PORT_COUNT: usize = 65536;
 
 var test_in_ports: [PORT_COUNT]u8 = [_]u8{0} ** PORT_COUNT;
 var test_out_ports: [PORT_COUNT]u8 = [_]u8{0} ** PORT_COUNT;
+var test_outw_ports: [PORT_COUNT]u16 = [_]u16{0} ** PORT_COUNT;
 var test_io_wait_count: usize = 0;
 
 pub inline fn outb(port: u16, value: u8) void {
@@ -30,6 +31,18 @@ pub inline fn inb(port: u16) u8 {
     );
 }
 
+pub inline fn outw(port: u16, value: u16) void {
+    if (builtin.is_test) {
+        test_outw_ports[port] = value;
+        return;
+    }
+
+    asm volatile ("outw %[value], %[port]"
+        :
+        : [value] "{ax}" (value), [port] "{dx}" (port)
+    );
+}
+
 pub inline fn ioWait() void {
     if (builtin.is_test) {
         test_io_wait_count += 1;
@@ -48,6 +61,7 @@ pub fn testReset() void {
     std.debug.assert(builtin.is_test);
     @memset(&test_in_ports, 0);
     @memset(&test_out_ports, 0);
+    @memset(&test_outw_ports, 0);
     test_io_wait_count = 0;
 }
 
@@ -66,6 +80,11 @@ pub fn testIoWaitCount() usize {
     return test_io_wait_count;
 }
 
+pub fn testGetOutW(port: u16) u16 {
+    std.debug.assert(builtin.is_test);
+    return test_outw_ports[port];
+}
+
 test "arch test mock in/out and io wait" {
     testReset();
 
@@ -74,6 +93,9 @@ test "arch test mock in/out and io wait" {
 
     outb(0x3D4, 0x0F);
     try std.testing.expectEqual(@as(u8, 0x0F), testGetOut(0x3D4));
+
+    outw(0x604, 0x2000);
+    try std.testing.expectEqual(@as(u16, 0x2000), testGetOutW(0x604));
 
     ioWait();
     try std.testing.expectEqual(@as(usize, 1), testIoWaitCount());

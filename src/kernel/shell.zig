@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 
 const arch = @import("arch.zig");
 const keyboard = @import("keyboard.zig");
@@ -176,7 +177,7 @@ fn submitLine() void {
 
 pub fn execute(line_in: []const u8) void {
     if (equals(line_in, "help")) {
-        printk.println("commands: help clear screen <n> selftest selftest stop echo <txt> halt reboot");
+        printk.println("commands: help clear screen <n> selftest selftest stop echo <txt> halt reboot shutdown");
         return;
     }
 
@@ -222,6 +223,12 @@ pub fn execute(line_in: []const u8) void {
         arch.haltForever();
     }
 
+    if (equals(line_in, "shutdown")) {
+        printk.println("shutting down...");
+        shutdown();
+        return;
+    }
+
     if (line_in.len != 0) {
         printk.printlnf("unknown command: {s}", .{line_in});
     }
@@ -260,6 +267,19 @@ fn parseSingleDigit(input: []const u8) ?usize {
 fn reboot() void {
     while ((arch.inb(0x64) & 0x02) != 0) {}
     arch.outb(0x64, 0xFE);
+}
+
+fn shutdown() void {
+    // Common QEMU/ACPI/legacy power-off ports.
+    arch.outw(0x604, 0x2000);
+    arch.outw(0xB004, 0x2000);
+    arch.outw(0x4004, 0x3400);
+
+    if (builtin.is_test) {
+        return;
+    }
+
+    arch.haltForever();
 }
 
 fn equals(a: []const u8, b: []const u8) bool {
@@ -307,4 +327,14 @@ test "command execution selftest stop path" {
 
     execute("selftest stop");
     try std.testing.expect(!selftest.isActive());
+}
+
+test "command execution shutdown writes poweroff ports" {
+    screens.init();
+    arch.testReset();
+
+    execute("shutdown");
+    try std.testing.expectEqual(@as(u16, 0x2000), arch.testGetOutW(0x604));
+    try std.testing.expectEqual(@as(u16, 0x2000), arch.testGetOutW(0xB004));
+    try std.testing.expectEqual(@as(u16, 0x3400), arch.testGetOutW(0x4004));
 }
